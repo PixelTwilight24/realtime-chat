@@ -1,0 +1,9 @@
+node_modules
+dist
+.angular
+api/bin
+api/obj
+api/wwwroot/uploads
+.git
+.vscode
+*.md

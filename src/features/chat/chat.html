@@ -1,0 +1,477 @@
+<div class="h-screen flex bg-base-200">
+
+  <!-- Sidebar -->
+  <div class="w-80 bg-base-100 border-r border-base-300 flex flex-col">
+
+    <div class="px-4 py-4 flex items-center justify-between">
+      <h2 class="text-lg font-bold">Chats</h2>
+      <div class="flex items-center gap-1">
+        <span class="badge badge-neutral badge-sm">{{ users().length }}</span>
+        <button
+          class="btn btn-ghost btn-circle btn-sm"
+          title="My Profile"
+          (click)="openMyProfile()"
+        >
+          <fa-icon icon="user"></fa-icon>
+        </button>
+        <button
+          class="btn btn-ghost btn-circle btn-sm"
+          title="Logout"
+          (click)="logout()"
+        >
+          <fa-icon icon="right-from-bracket"></fa-icon>
+        </button>
+      </div>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="px-3 pb-3">
+      <label class="input input-bordered input-sm flex items-center gap-2 w-full">
+        <fa-icon icon="magnifying-glass" class="opacity-50 text-xs"></fa-icon>
+        <input
+          type="text"
+          class="grow"
+          placeholder="Search people..."
+          [formControl]="searchControl"
+        />
+      </label>
+    </div>
+
+    <div class="flex-1 overflow-y-auto px-2 space-y-1 pb-2">
+
+      @if (isLoadingUsers()) {
+        <p class="text-sm opacity-60 text-center py-4">Loading contacts…</p>
+      } @else if (usersError()) {
+        <p class="text-sm text-error text-center py-4">{{ usersError() }}</p>
+      } @else if (filteredUsers().length === 0) {
+        @if (searchControl.value?.trim()) {
+          <p class="text-sm opacity-60 text-center py-4">No contacts found</p>
+        } @else {
+          <p class="text-sm opacity-60 text-center py-6 px-4">
+            No conversations yet.<br />Search for someone to start chatting.
+          </p>
+        }
+      } @else {
+
+        @for (user of filteredUsers(); track user.id) {
+          <div
+            class="flex items-center gap-3 px-2 py-2.5 rounded-xl cursor-pointer transition-colors hover:bg-base-200"
+            [class.bg-base-200]="selectedUser()?.id === user.id"
+            (click)="selectUser(user)"
+          >
+            <div class="avatar" [class.online]="user.isOnline" [class.offline]="!user.isOnline">
+              <div class="w-11 rounded-full">
+                <img [src]="user.avatar" />
+              </div>
+            </div>
+
+            <div class="min-w-0 flex-1">
+              <p class="font-medium truncate">{{ user.name }}</p>
+              <p class="text-xs opacity-60 truncate">{{ user.lastMessage || 'No messages yet' }}</p>
+            </div>
+          </div>
+        }
+
+      }
+
+    </div>
+
+  </div>
+
+  <!-- Chat Area -->
+  <div class="flex-1 flex relative m-2">
+
+    <div
+    class="flex-1 flex flex-col rounded-l-2xl bg-base-100 min-w-0"
+    [class.rounded-r-2xl]="!showSettings"
+    >
+
+        @if (selectedUser(); as user) {
+
+            <!-- Header -->
+            <div class="p-4 border-b border-base-300 flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+
+                    <div class="avatar" [class.online]="user.isOnline" [class.offline]="!user.isOnline">
+                        <div class="w-10 rounded-full">
+                            <img [src]="user.avatar" />
+                        </div>
+                    </div>
+
+                    <div>
+                        <p class="font-semibold leading-tight">{{ user.name }}</p>
+                        <p
+                            class="text-xs"
+                            [class.text-success]="user.isOnline"
+                            [class.text-error]="!user.isOnline"
+                        >
+                            {{ user.isOnline ? 'Online' : 'Offline' }}
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Toggle Settings -->
+                <button class="btn btn-sm btn-ghost btn-circle" (click)="toggleSettings()">
+                    <fa-icon icon="ellipsis"></fa-icon>
+                </button>
+            </div>
+
+            <!-- Messages -->
+            <div class="flex-1 overflow-y-auto p-4 space-y-2">
+
+            @if (isLoadingMessages()) {
+                <p class="text-sm opacity-60 text-center py-4">Loading messages…</p>
+            } @else if (messages().length === 0) {
+                <p class="text-sm opacity-60 text-center py-4">No messages yet. Say hello!</p>
+            } @else {
+
+                @for (msg of messages(); track msg.id) {
+                    <div
+                    class="chat"
+                    [class.chat-end]="msg.isMine"
+                    [class.chat-start]="!msg.isMine"
+                    >
+                    <div
+                        class="chat-bubble max-w-xs md:max-w-md wrap-break-word"
+                        [class.chat-bubble-primary]="msg.isMine"
+                    >
+                        @if (msg.attachment; as attachment) {
+                            @if (attachment.contentType.startsWith('image/')) {
+                                <a [href]="attachment.url" target="_blank" rel="noopener" class="block mb-1">
+                                    <img [src]="attachment.url" class="rounded-lg max-w-full max-h-64" />
+                                </a>
+                            } @else {
+                                <a
+                                    [href]="attachment.url"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="flex items-center gap-2 bg-black/10 rounded-lg px-3 py-2 mb-1"
+                                >
+                                    <fa-icon icon="file"></fa-icon>
+                                    <span class="flex-1 min-w-0 truncate text-sm">{{ attachment.fileName }}</span>
+                                    <fa-icon icon="download" class="text-xs opacity-70"></fa-icon>
+                                </a>
+                            }
+                        }
+                        @if (msg.text) {
+                            <div>{{ msg.text }}</div>
+                        }
+                    </div>
+                    </div>
+                }
+
+            }
+
+            </div>
+
+            <!-- Input -->
+            <form
+            [formGroup]="chatForm"
+            (ngSubmit)="sendMessage()"
+            class="p-4 border-t border-base-300"
+            >
+
+                @if (hubError()) {
+                    <p class="text-error text-sm mb-2">{{ hubError() }}</p>
+                }
+                @if (fileError()) {
+                    <p class="text-error text-sm mb-2">{{ fileError() }}</p>
+                }
+
+                @if (pendingFile(); as file) {
+                    <div class="flex items-center gap-2 bg-base-200 rounded-lg px-3 py-2 mb-2">
+                        @if (pendingFilePreviewUrl(); as previewUrl) {
+                            <img [src]="previewUrl" class="w-10 h-10 rounded object-cover" />
+                        } @else {
+                            <fa-icon icon="file" class="opacity-60"></fa-icon>
+                        }
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm truncate">{{ file.name }}</p>
+                            <p class="text-xs opacity-60">{{ formatFileSize(file.size) }}</p>
+                        </div>
+                        <button type="button" class="btn btn-ghost btn-circle btn-xs" (click)="clearPendingFile()">
+                            <fa-icon icon="xmark"></fa-icon>
+                        </button>
+                    </div>
+                }
+
+                <div class="flex gap-2 items-center">
+
+                    <input
+                    #fileInput
+                    type="file"
+                    class="hidden"
+                    (change)="onFileSelected($event)"
+                    />
+
+                    <button
+                    type="button"
+                    class="btn btn-ghost btn-circle"
+                    [disabled]="isUploadingFile()"
+                    (click)="fileInput.click()"
+                    >
+                    <fa-icon icon="paperclip"></fa-icon>
+                    </button>
+
+                    <input
+                    type="text"
+                    class="input input-bordered flex-1 rounded-full"
+                    placeholder="Type a message..."
+                    formControlName="message"
+                    />
+
+                    <button
+                    class="btn btn-primary btn-circle"
+                    type="submit"
+                    [disabled]="!canSend"
+                    >
+                    @if (isUploadingFile()) {
+                        <span class="loading loading-spinner loading-sm"></span>
+                    } @else {
+                        <fa-icon icon="paper-plane"></fa-icon>
+                    }
+                    </button>
+
+                </div>
+
+            </form>
+
+        } @else {
+
+            <!-- Empty state -->
+            <div class="flex-1 flex flex-col items-center justify-center gap-3 text-center opacity-60">
+                <fa-icon icon="comments" class="text-4xl"></fa-icon>
+                <p class="font-medium">Select a chat to start messaging</p>
+            </div>
+
+        }
+    </div>
+
+    <!-- Settings Panel -->
+    <div
+    class="w-80 bg-base-100 border-l rounded-r-2xl border-base-300 p-4 transition-all duration-300"
+    [class.hidden]="!showSettings"
+    >
+
+    <h3 class="font-bold text-lg mb-4">Chat Settings</h3>
+
+    @if (selectedUser(); as user) {
+
+        <div class="flex flex-col items-center text-center">
+
+        <div class="avatar mb-3" [class.online]="user.isOnline" [class.offline]="!user.isOnline">
+            <div class="w-20 rounded-full">
+            <img [src]="user.avatar" />
+            </div>
+        </div>
+
+        <p class="font-semibold text-lg">{{ user.name }}</p>
+
+        <p
+            class="text-sm"
+            [class.text-success]="user.isOnline"
+            [class.text-error]="!user.isOnline"
+        >
+            {{ user.isOnline ? 'Online' : 'Offline' }}
+        </p>
+
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Actions -->
+        <div class="space-y-2">
+
+        <button
+            class="btn btn-outline w-full btn-sm justify-start gap-2"
+            (click)="openProfile()"
+            >
+            <fa-icon icon="user"></fa-icon>
+            View Profile
+        </button>
+
+        <button class="btn btn-outline w-full btn-sm justify-start gap-2">
+            <fa-icon icon="bell-slash"></fa-icon>
+            Mute Notifications
+        </button>
+
+        <button class="btn btn-error btn-outline w-full btn-sm justify-start gap-2">
+            <fa-icon icon="ban"></fa-icon>
+            Block User
+        </button>
+
+        </div>
+
+    } @else {
+
+        <p class="text-sm opacity-60 text-center">
+        Select a chat to view settings
+        </p>
+
+    }
+
+    </div>
+
+  </div>
+
+</div>
+
+
+@if (showProfileModal && profileUser(); as user) {
+
+  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+
+    <div class="bg-base-100 w-full max-w-md rounded-xl shadow-xl p-6 relative">
+
+      <!-- Close button -->
+      <button
+        class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+        (click)="closeProfile()"
+      >
+        <fa-icon icon="xmark"></fa-icon>
+      </button>
+
+      @if (!isEditingProfile()) {
+
+        <!-- Profile Header -->
+        <div class="flex flex-col items-center text-center">
+
+          <div class="avatar mb-3" [class.online]="user.isOnline" [class.offline]="!user.isOnline">
+            <div class="w-20 rounded-full">
+              <img [src]="user.avatar" />
+            </div>
+          </div>
+
+          <h2 class="text-xl font-bold">
+            {{ user.name }}
+          </h2>
+
+          <p
+            class="text-sm"
+            [class.text-success]="user.isOnline"
+            [class.text-error]="!user.isOnline"
+          >
+            {{ isOwnProfile() ? 'This is you' : (user.isOnline ? 'Active now' : 'Last seen recently') }}
+          </p>
+
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Info -->
+        <div class="space-y-2 text-sm">
+
+          <p><span class="font-semibold">User ID:</span> {{ user.id }}</p>
+          <p><span class="font-semibold">Name:</span> {{ user.name }}</p>
+          <p><span class="font-semibold">Gender:</span> {{ user.gender }}</p>
+          @if (isOwnProfile()) {
+            <p><span class="font-semibold">Email:</span> {{ user.email }}</p>
+          }
+
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Actions -->
+        <div class="space-y-2">
+
+          @if (isOwnProfile()) {
+            <button
+                class="btn btn-primary w-full btn-sm"
+                (click)="startEditProfile()"
+                >
+              Edit Profile
+            </button>
+          }
+
+          <button
+              class="btn btn-outline w-full btn-sm"
+              (click)="closeProfile()"
+              >
+            Close
+          </button>
+
+        </div>
+
+      } @else {
+
+        <!-- Edit form -->
+        <h2 class="text-xl font-bold text-center mb-4">Edit Profile</h2>
+
+        <form [formGroup]="profileForm" (ngSubmit)="saveProfile()" class="space-y-4">
+
+          <div class="flex justify-center">
+            <div class="avatar">
+              <div class="w-20 rounded-full">
+                <img [src]="profileForm.value.avatar || user.avatar" />
+              </div>
+            </div>
+          </div>
+
+          <div class="form-control">
+            <label class="label">
+              <span class="label-text">Name</span>
+            </label>
+            <input
+              type="text"
+              class="input input-bordered w-full"
+              formControlName="name"
+            />
+          </div>
+
+          <div class="form-control">
+            <label class="label">
+              <span class="label-text">Gender</span>
+            </label>
+            <input
+              type="text"
+              class="input input-bordered w-full"
+              formControlName="gender"
+            />
+          </div>
+
+          <div class="form-control">
+            <label class="label">
+              <span class="label-text">Avatar URL</span>
+            </label>
+            <input
+              type="text"
+              class="input input-bordered w-full"
+              formControlName="avatar"
+            />
+          </div>
+
+          @if (profileSaveError()) {
+            <p class="text-error text-sm text-center">{{ profileSaveError() }}</p>
+          }
+
+          <div class="space-y-2">
+            <button
+                class="btn btn-primary w-full btn-sm"
+                type="submit"
+                [disabled]="profileForm.invalid || isSavingProfile()"
+                >
+              @if (isSavingProfile()) {
+                <span class="loading loading-spinner loading-sm"></span>
+              }
+              Save Changes
+            </button>
+
+            <button
+                class="btn btn-outline w-full btn-sm"
+                type="button"
+                (click)="cancelEditProfile()"
+                >
+              Cancel
+            </button>
+          </div>
+
+        </form>
+
+      }
+
+    </div>
+
+  </div>
+
+}

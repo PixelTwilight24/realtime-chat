@@ -1,0 +1,111 @@
+<div class="min-h-screen flex items-center justify-center bg-base-200">
+
+  <div class="card w-full max-w-md bg-base-100 shadow-xl">
+
+    <div class="card-body">
+
+      <h2 class="text-2xl font-bold text-center">Login</h2>
+
+      <form [formGroup]="loginForm" (ngSubmit)="onLogin()" class="space-y-4 mt-4">
+
+        <!-- Email -->
+        <div class="form-control">
+          <label class="label">
+            <span class="label-text">Email</span>
+          </label>
+
+          <input
+            type="email"
+            class="input input-bordered w-full"
+            formControlName="email"
+            placeholder="email@example.com"
+          />
+
+          @if (loginForm.get('email')?.touched && loginForm.get('email')?.invalid) {
+            <p class="text-error text-sm mt-1">
+              Valid email is required
+            </p>
+          }
+        </div>
+
+        <!-- Password -->
+        <div class="form-control">
+          <label class="label">
+            <span class="label-text">Password</span>
+          </label>
+
+          <input
+            type="password"
+            class="input input-bordered w-full"
+            formControlName="password"
+            placeholder="••••••••"
+          />
+
+          @if (loginForm.get('password')?.touched && loginForm.get('password')?.invalid) {
+            <p class="text-error text-sm mt-1">
+              Password must be at least 6 characters
+            </p>
+          }
+        </div>
+
+        <!-- Remember + Forgot -->
+        <div class="flex items-center justify-between">
+
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" class="checkbox" formControlName="rememberMe" />
+            <span class="text-sm">Remember me</span>
+          </label>
+
+          <a
+            class="text-sm link link-primary cursor-pointer"
+            (click)="onForgotPassword()"
+          >
+            Forgot password?
+          </a>
+
+        </div>
+
+        <!-- Server error -->
+        @if (errorMessage()) {
+          <p class="text-error text-sm text-center">
+            {{ errorMessage() }}
+          </p>
+        }
+
+        <!-- Login Button -->
+        <button
+          class="btn btn-primary w-full"
+          type="submit"
+          [disabled]="loginForm.invalid || isSubmitting()"
+        >
+          @if (isSubmitting()) {
+            <span class="loading loading-spinner loading-sm"></span>
+          }
+          Login
+        </button>
+
+      </form>
+
+      <!-- Divider -->
+      <div class="divider">OR</div>
+
+      <!-- Signup -->
+      <div class="text-center">
+
+        <p class="text-sm">
+          Don’t have an account?
+        </p>
+
+        <button
+          class="btn btn-outline btn-sm mt-2 w-full"
+          (click)="onSignup()"
+        >
+          Create Account
+        </button>
+
+      </div>
+
+    </div>
+  </div>
+
+</div>
