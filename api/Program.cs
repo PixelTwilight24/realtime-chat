@@ -8,7 +8,6 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
-using Npgsql;
 
 // Must exist before WebApplication.CreateBuilder resolves the static-file provider below —
 // creating it later (e.g. lazily in LocalFileStorageService) is too late on a fresh clone,
@@ -48,8 +47,12 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-builder.Services.AddDbContext<ChatDbContext>(options =>
-    options.UseNpgsql(BuildConnectionString(builder.Configuration)));
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException(
+        "No database connection configured. Set ConnectionStrings:DefaultConnection via " +
+        "'dotnet user-secrets' locally, or the ConnectionStrings__DefaultConnection environment variable in production.");
+
+builder.Services.AddDbContext<ChatDbContext>(options => options.UseSqlServer(connectionString));
 
 builder.Services.AddSignalR();
 
@@ -184,33 +187,3 @@ app.MapFallback("/hubs/{**path}", () => Results.NotFound());
 app.MapFallbackToFile("index.html");
 
 app.Run();
-
-static string BuildConnectionString(IConfiguration configuration)
-{
-    // Railway's Postgres plugin injects DATABASE_URL as postgresql://user:pass@host:port/db,
-    // which isn't an Npgsql-format connection string — convert it. Locally, DATABASE_URL is
-    // unset and ConnectionStrings:DefaultConnection (from user-secrets) is used instead.
-    var databaseUrl = configuration["DATABASE_URL"];
-    if (string.IsNullOrEmpty(databaseUrl))
-    {
-        return configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException(
-                "No database connection configured. Set ConnectionStrings:DefaultConnection " +
-                "via 'dotnet user-secrets' locally, or DATABASE_URL in production.");
-    }
-
-    var uri = new Uri(databaseUrl);
-    var userInfo = uri.UserInfo.Split(':', 2);
-
-    var connectionStringBuilder = new NpgsqlConnectionStringBuilder
-    {
-        Host = uri.Host,
-        Port = uri.Port,
-        Username = Uri.UnescapeDataString(userInfo[0]),
-        Password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : string.Empty,
-        Database = uri.AbsolutePath.TrimStart('/'),
-        SslMode = SslMode.Prefer,
-    };
-
-    return connectionStringBuilder.ToString();
-}
