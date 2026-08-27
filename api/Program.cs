@@ -51,7 +51,15 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddDbContext<ChatDbContext>(options =>
     options.UseNpgsql(BuildConnectionString(builder.Configuration)));
 
-builder.Services.AddSignalR();
+// Railway's edge proxy idles out WebSocket connections faster than SignalR's default
+// 15s keep-alive / 30s client-timeout tolerates, causing spurious disconnect/reconnect
+// churn (observed as presence flapping online/offline every ~30s). Ping more often so
+// the connection never looks idle to whatever's sitting in front of it.
+builder.Services.AddSignalR(options =>
+{
+    options.KeepAliveInterval = TimeSpan.FromSeconds(10);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(20);
+});
 
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
 builder.Services.Configure<CryptoOptions>(builder.Configuration.GetSection(CryptoOptions.SectionName));

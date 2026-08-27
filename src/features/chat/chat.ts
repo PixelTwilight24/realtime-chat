@@ -260,6 +260,12 @@ export class Chat implements OnInit {
   private handlePresenceChange(userId: number, isOnline: boolean) {
     this.users.update((list) => list.map((user) => (user.id === userId ? { ...user, isOnline } : user)));
     this.selectedUser.update((user) => (user && user.id === userId ? { ...user, isOnline } : user));
+
+    // A user found via search (not yet a conversation) lives only in directoryUsers —
+    // without this, their presence dot never updates until the whole list reloads.
+    this.directoryUsers.update((list) =>
+      list ? list.map((user) => (user.id === userId ? { ...user, isOnline } : user)) : list
+    );
   }
 
   onFileSelected(event: Event) {
