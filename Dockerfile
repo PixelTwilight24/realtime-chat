@@ -7,7 +7,7 @@ FROM node:22-alpine AS frontend-build
 WORKDIR /src
 COPY package.json package-lock.json ./
 RUN npm ci
-COPY angular.json tsconfig.json tsconfig.app.json tsconfig.spec.json ./
+COPY angular.json tsconfig.json tsconfig.app.json tsconfig.spec.json .postcssrc.json ./
 COPY public ./public
 COPY src ./src
 RUN npm run build
