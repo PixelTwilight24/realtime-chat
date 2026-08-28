@@ -1,7 +1,11 @@
-<div class="h-screen flex bg-base-200">
+<div class="h-dvh flex bg-base-200">
 
   <!-- Sidebar -->
-  <div class="w-80 bg-base-100 border-r border-base-300 flex flex-col">
+  <div
+    class="w-full md:w-80 bg-base-100 border-r border-base-300 flex-col md:flex"
+    [class.flex]="!selectedUser()"
+    [class.hidden]="selectedUser()"
+  >
 
     <div class="px-4 py-4 flex items-center justify-between">
       <h2 class="text-lg font-bold">Chats</h2>
@@ -79,11 +83,15 @@
   </div>
 
   <!-- Chat Area -->
-  <div class="flex-1 flex relative m-2">
+  <div
+    class="flex-1 relative md:m-2 md:flex"
+    [class.flex]="selectedUser()"
+    [class.hidden]="!selectedUser()"
+  >
 
     <div
-    class="flex-1 flex flex-col rounded-l-2xl bg-base-100 min-w-0"
-    [class.rounded-r-2xl]="!showSettings"
+    class="flex-1 flex flex-col bg-base-100 min-w-0 md:rounded-l-2xl"
+    [class.md:rounded-r-2xl]="!showSettings"
     >
 
         @if (selectedUser(); as user) {
@@ -91,6 +99,10 @@
             <!-- Header -->
             <div class="p-4 border-b border-base-300 flex items-center justify-between gap-3">
                 <div class="flex items-center gap-3">
+
+                    <button class="btn btn-ghost btn-circle btn-sm md:hidden" (click)="selectedUser.set(null)">
+                        <fa-icon icon="angle-left"></fa-icon>
+                    </button>
 
                     <div class="avatar" [class.online]="user.isOnline" [class.offline]="!user.isOnline">
                         <div class="w-10 rounded-full">
@@ -247,13 +259,24 @@
         }
     </div>
 
+    <!-- Settings backdrop (mobile/tablet overlay only) -->
+    @if (showSettings) {
+      <div class="fixed inset-0 bg-black/40 z-30 lg:hidden" (click)="toggleSettings()"></div>
+    }
+
     <!-- Settings Panel -->
     <div
-    class="w-80 bg-base-100 border-l rounded-r-2xl border-base-300 p-4 transition-all duration-300"
+    class="fixed inset-y-0 right-0 z-40 w-72 max-w-[85vw] overflow-y-auto bg-base-100 border-l rounded-r-2xl border-base-300 p-4 shadow-xl transition-transform duration-300 lg:static lg:z-auto lg:w-80 lg:max-w-none lg:shadow-none lg:translate-x-0"
     [class.hidden]="!showSettings"
+    [class.translate-x-full]="!showSettings"
     >
 
-    <h3 class="font-bold text-lg mb-4">Chat Settings</h3>
+    <div class="flex items-center justify-between mb-4">
+        <h3 class="font-bold text-lg">Chat Settings</h3>
+        <button class="btn btn-sm btn-circle btn-ghost lg:hidden" (click)="toggleSettings()">
+            <fa-icon icon="xmark"></fa-icon>
+        </button>
+    </div>
 
     @if (selectedUser(); as user) {
 
@@ -319,7 +342,7 @@
 
 @if (showProfileModal && profileUser(); as user) {
 
-  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
 
     <div class="bg-base-100 w-full max-w-md rounded-xl shadow-xl p-6 relative">
 
