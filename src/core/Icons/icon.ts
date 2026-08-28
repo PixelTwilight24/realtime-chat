@@ -16,6 +16,12 @@ import {
   faPaperclip,
   faFile,
   faDownload,
+  faUsers,
+  faUserPlus,
+  faUserMinus,
+  faCrown,
+  faPlus,
+  faPenToSquare,
 } from '@fortawesome/free-solid-svg-icons';
 
 export function registerIcons(library: FaIconLibrary) {
@@ -35,6 +41,12 @@ export function registerIcons(library: FaIconLibrary) {
     faRightFromBracket,
     faPaperclip,
     faFile,
-    faDownload
+    faDownload,
+    faUsers,
+    faUserPlus,
+    faUserMinus,
+    faCrown,
+    faPlus,
+    faPenToSquare
   );
 }

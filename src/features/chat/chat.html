@@ -3,14 +3,21 @@
   <!-- Sidebar -->
   <div
     class="w-full md:w-80 bg-base-100 border-r border-base-300 flex-col md:flex"
-    [class.flex]="!selectedUser()"
-    [class.hidden]="selectedUser()"
+    [class.flex]="!selectedUser() && !selectedGroup()"
+    [class.hidden]="selectedUser() || selectedGroup()"
   >
 
     <div class="px-4 py-4 flex items-center justify-between">
       <h2 class="text-lg font-bold">Chats</h2>
       <div class="flex items-center gap-1">
         <span class="badge badge-neutral badge-sm">{{ users().length }}</span>
+        <button
+          class="btn btn-ghost btn-circle btn-sm"
+          title="New Group"
+          (click)="openCreateGroupModal()"
+        >
+          <fa-icon icon="plus"></fa-icon>
+        </button>
         <button
           class="btn btn-ghost btn-circle btn-sm"
           title="My Profile"
@@ -78,6 +85,35 @@
 
       }
 
+      @if (groups().length > 0 || isLoadingGroups()) {
+        <p class="text-xs font-semibold uppercase opacity-50 px-2 pt-3 pb-1">Groups</p>
+
+        @if (isLoadingGroups()) {
+          <p class="text-sm opacity-60 text-center py-2">Loading groups…</p>
+        } @else if (groupsError()) {
+          <p class="text-sm text-error text-center py-2">{{ groupsError() }}</p>
+        } @else {
+          @for (group of filteredGroups(); track group.id) {
+            <div
+              class="flex items-center gap-3 px-2 py-2.5 rounded-xl cursor-pointer transition-colors hover:bg-base-200"
+              [class.bg-base-200]="selectedGroup()?.id === group.id"
+              (click)="selectGroup(group)"
+            >
+              <div class="avatar placeholder">
+                <div class="w-11 rounded-full bg-neutral text-neutral-content">
+                  <fa-icon icon="users"></fa-icon>
+                </div>
+              </div>
+
+              <div class="min-w-0 flex-1">
+                <p class="font-medium truncate">{{ group.name }}</p>
+                <p class="text-xs opacity-60 truncate">{{ group.lastMessage || (group.memberCount + ' members') }}</p>
+              </div>
+            </div>
+          }
+        }
+      }
+
     </div>
 
   </div>
@@ -85,8 +121,8 @@
   <!-- Chat Area -->
   <div
     class="flex-1 relative md:m-2 md:flex"
-    [class.flex]="selectedUser()"
-    [class.hidden]="!selectedUser()"
+    [class.flex]="selectedUser() || selectedGroup()"
+    [class.hidden]="!selectedUser() && !selectedGroup()"
   >
 
     <div
@@ -94,32 +130,45 @@
     [class.md:rounded-r-2xl]="!showSettings"
     >
 
-        @if (selectedUser(); as user) {
+        @if (selectedUser() || selectedGroup()) {
 
             <!-- Header -->
             <div class="p-4 border-b border-base-300 flex items-center justify-between gap-3">
                 <div class="flex items-center gap-3">
 
-                    <button class="btn btn-ghost btn-circle btn-sm md:hidden" (click)="selectedUser.set(null)">
+                    <button class="btn btn-ghost btn-circle btn-sm md:hidden" (click)="closeConversation()">
                         <fa-icon icon="angle-left"></fa-icon>
                     </button>
 
-                    <div class="avatar" [class.online]="user.isOnline" [class.offline]="!user.isOnline">
-                        <div class="w-10 rounded-full">
-                            <img [src]="user.avatar" />
+                    @if (selectedGroup(); as group) {
+                        <div class="avatar placeholder">
+                            <div class="w-10 rounded-full bg-neutral text-neutral-content">
+                                <fa-icon icon="users"></fa-icon>
+                            </div>
                         </div>
-                    </div>
 
-                    <div>
-                        <p class="font-semibold leading-tight">{{ user.name }}</p>
-                        <p
-                            class="text-xs"
-                            [class.text-success]="user.isOnline"
-                            [class.text-error]="!user.isOnline"
-                        >
-                            {{ user.isOnline ? 'Online' : 'Offline' }}
-                        </p>
-                    </div>
+                        <div>
+                            <p class="font-semibold leading-tight">{{ group.name }}</p>
+                            <p class="text-xs opacity-60">{{ group.members.length }} members</p>
+                        </div>
+                    } @else if (selectedUser(); as user) {
+                        <div class="avatar" [class.online]="user.isOnline" [class.offline]="!user.isOnline">
+                            <div class="w-10 rounded-full">
+                                <img [src]="user.avatar" />
+                            </div>
+                        </div>
+
+                        <div>
+                            <p class="font-semibold leading-tight">{{ user.name }}</p>
+                            <p
+                                class="text-xs"
+                                [class.text-success]="user.isOnline"
+                                [class.text-error]="!user.isOnline"
+                            >
+                                {{ user.isOnline ? 'Online' : 'Offline' }}
+                            </p>
+                        </div>
+                    }
                 </div>
 
                 <!-- Toggle Settings -->
@@ -143,6 +192,16 @@
                     [class.chat-end]="msg.isMine"
                     [class.chat-start]="!msg.isMine"
                     >
+                    @if (selectedGroup() && !msg.isMine) {
+                        <div class="chat-image avatar">
+                            <div class="w-8 rounded-full">
+                                <img [src]="groupMemberById(msg.senderId!)?.avatar" />
+                            </div>
+                        </div>
+                        <div class="chat-header text-xs opacity-60 mb-0.5">
+                            {{ groupMemberById(msg.senderId!)?.name }}
+                        </div>
+                    }
                     <div
                         class="chat-bubble max-w-xs md:max-w-md wrap-break-word"
                         [class.chat-bubble-primary]="msg.isMine"
@@ -272,13 +331,113 @@
     >
 
     <div class="flex items-center justify-between mb-4">
-        <h3 class="font-bold text-lg">Chat Settings</h3>
+        <h3 class="font-bold text-lg">{{ selectedGroup() ? 'Group Info' : 'Chat Settings' }}</h3>
         <button class="btn btn-sm btn-circle btn-ghost lg:hidden" (click)="toggleSettings()">
             <fa-icon icon="xmark"></fa-icon>
         </button>
     </div>
 
-    @if (selectedUser(); as user) {
+    @if (selectedGroup(); as group) {
+
+        <div class="flex flex-col items-center text-center">
+
+        <div class="avatar placeholder mb-3">
+            <div class="w-20 rounded-full bg-neutral text-neutral-content">
+                <fa-icon icon="users" class="text-2xl"></fa-icon>
+            </div>
+        </div>
+
+        <p class="font-semibold text-lg">{{ group.name }}</p>
+        <p class="text-sm opacity-60">{{ group.members.length }} members</p>
+
+        </div>
+
+        @if (isGroupAdmin()) {
+            <div class="flex gap-2 mt-3">
+                <input #newName type="text" class="input input-bordered input-sm flex-1" placeholder="Rename group..."
+                       (keydown.enter)="renameGroup(newName.value); newName.value = ''" />
+                <button type="button" class="btn btn-sm btn-ghost btn-circle" (click)="renameGroup(newName.value); newName.value = ''">
+                    <fa-icon icon="pen-to-square"></fa-icon>
+                </button>
+            </div>
+        }
+
+        <div class="divider">Members</div>
+
+        <div class="space-y-1 max-h-60 overflow-y-auto">
+            @for (member of group.members; track member.userId) {
+                <div class="flex items-center gap-2 px-1 py-1.5">
+                    <div class="avatar" [class.online]="member.isOnline" [class.offline]="!member.isOnline">
+                        <div class="w-8 rounded-full">
+                            <img [src]="member.avatar" />
+                        </div>
+                    </div>
+
+                    <div class="min-w-0 flex-1 flex items-center gap-1">
+                        <span class="text-sm truncate">{{ member.name }}</span>
+                        @if (member.isAdmin) {
+                            <fa-icon icon="crown" class="text-warning text-xs" title="Admin"></fa-icon>
+                        }
+                    </div>
+
+                    @if (isGroupAdmin() && member.userId !== currentUserId) {
+                        @if (member.isAdmin) {
+                            <button class="btn btn-ghost btn-xs btn-circle" title="Demote" (click)="demoteMember(member.userId)">
+                                <fa-icon icon="user-minus"></fa-icon>
+                            </button>
+                        } @else {
+                            <button class="btn btn-ghost btn-xs btn-circle" title="Promote to admin" (click)="promoteMember(member.userId)">
+                                <fa-icon icon="user-plus"></fa-icon>
+                            </button>
+                        }
+                        <button class="btn btn-ghost btn-xs btn-circle text-error" title="Remove" (click)="removeMember(member.userId)">
+                            <fa-icon icon="xmark"></fa-icon>
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+
+        @if (isGroupAdmin() && addableMembers().length > 0) {
+            <div class="divider">Add Member</div>
+
+            <div class="space-y-1 max-h-40 overflow-y-auto">
+                @for (user of addableMembers(); track user.id) {
+                    <div class="flex items-center gap-2 px-1 py-1.5">
+                        <div class="avatar">
+                            <div class="w-8 rounded-full">
+                                <img [src]="user.avatar" />
+                            </div>
+                        </div>
+                        <span class="text-sm truncate flex-1">{{ user.name }}</span>
+                        <button class="btn btn-ghost btn-xs btn-circle" title="Add to group" (click)="addMember(user.id)">
+                            <fa-icon icon="user-plus"></fa-icon>
+                        </button>
+                    </div>
+                }
+            </div>
+        }
+
+        <div class="divider"></div>
+
+        <!-- Actions -->
+        <div class="space-y-2">
+
+        <button class="btn btn-outline w-full btn-sm justify-start gap-2" (click)="leaveGroup()">
+            <fa-icon icon="right-from-bracket"></fa-icon>
+            Leave Group
+        </button>
+
+        @if (isGroupAdmin()) {
+            <button class="btn btn-error btn-outline w-full btn-sm justify-start gap-2" (click)="deleteGroup()">
+                <fa-icon icon="ban"></fa-icon>
+                Delete Group
+            </button>
+        }
+
+        </div>
+
+    } @else if (selectedUser(); as user) {
 
         <div class="flex flex-col items-center text-center">
 
@@ -492,6 +651,76 @@
         </form>
 
       }
+
+    </div>
+
+  </div>
+
+}
+
+@if (showCreateGroupModal()) {
+
+  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+
+    <div class="bg-base-100 w-full max-w-md rounded-xl shadow-xl p-6 relative">
+
+      <button
+        class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+        (click)="closeCreateGroupModal()"
+      >
+        <fa-icon icon="xmark"></fa-icon>
+      </button>
+
+      <h2 class="text-xl font-bold text-center mb-4">New Group</h2>
+
+      <form [formGroup]="createGroupForm" (ngSubmit)="createGroup()">
+
+        <div class="form-control mb-4">
+          <label class="label">
+            <span class="label-text">Group name</span>
+          </label>
+          <input type="text" class="input input-bordered w-full" formControlName="name" />
+        </div>
+
+        <label class="label">
+          <span class="label-text">Members</span>
+        </label>
+
+        <div class="space-y-1 max-h-56 overflow-y-auto mb-4">
+          @for (u of directoryUsers() ?? []; track u.id) {
+            <label class="flex items-center gap-2 px-1 py-1.5 cursor-pointer hover:bg-base-200 rounded">
+              <input
+                type="checkbox"
+                class="checkbox checkbox-sm"
+                [checked]="isGroupMemberSelected(u.id)"
+                (change)="toggleGroupMemberSelection(u.id)"
+              />
+              <div class="avatar">
+                <div class="w-7 rounded-full">
+                  <img [src]="u.avatar" />
+                </div>
+              </div>
+              <span class="text-sm truncate flex-1">{{ u.name }}</span>
+            </label>
+          }
+        </div>
+
+        @if (createGroupError()) {
+          <p class="text-error text-sm mb-2">{{ createGroupError() }}</p>
+        }
+
+        <button
+          class="btn btn-primary w-full btn-sm"
+          type="submit"
+          [disabled]="createGroupForm.invalid || isCreatingGroup() || newGroupSelectedMemberIds().size === 0"
+        >
+          @if (isCreatingGroup()) {
+            <span class="loading loading-spinner loading-sm"></span>
+          }
+          Create Group
+        </button>
+
+      </form>
 
     </div>
 

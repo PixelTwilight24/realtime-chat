@@ -28,6 +28,51 @@ export interface PresenceChange {
   isOnline: boolean;
 }
 
+export interface GroupMemberDto {
+  userId: number;
+  name: string;
+  avatar: string;
+  isOnline: boolean;
+  isAdmin: boolean;
+  joinedAt: string;
+}
+
+export interface GroupDto {
+  id: number;
+  name: string;
+  createdById: number;
+  createdAt: string;
+  members: GroupMemberDto[];
+}
+
+export interface HubGroupMessage {
+  id: number;
+  groupId: number;
+  senderId: number;
+  text: string;
+  sentAt: string;
+  attachmentUrl: string | null;
+  attachmentFileName: string | null;
+  attachmentContentType: string | null;
+  attachmentSize: number | null;
+}
+
+export interface GroupMemberRemoved {
+  groupId: number;
+  userId: number;
+}
+
+export interface GroupMemberRoleChanged {
+  groupId: number;
+  userId: number;
+  isAdmin: boolean;
+}
+
+export interface GroupRenamedEvent {
+  groupId: number;
+  name: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ChatHub {
   private auth = inject(Auth);
@@ -35,6 +80,14 @@ export class ChatHub {
 
   readonly messageReceived$ = new Subject<HubMessage>();
   readonly presenceChanged$ = new Subject<PresenceChange>();
+
+  readonly groupMessageReceived$ = new Subject<HubGroupMessage>();
+  readonly groupCreated$ = new Subject<GroupDto>();
+  readonly groupMemberAdded$ = new Subject<GroupDto>();
+  readonly groupMemberRemoved$ = new Subject<GroupMemberRemoved>();
+  readonly groupMemberRoleChanged$ = new Subject<GroupMemberRoleChanged>();
+  readonly groupRenamed$ = new Subject<GroupRenamedEvent>();
+  readonly groupDeleted$ = new Subject<number>();
 
   async connect(): Promise<void> {
     if (this.connection) return;
@@ -48,6 +101,18 @@ export class ChatHub {
     connection.on('UserPresenceChanged', (userId: number, isOnline: boolean) =>
       this.presenceChanged$.next({ userId, isOnline })
     );
+
+    connection.on('ReceiveGroupMessage', (message: HubGroupMessage) => this.groupMessageReceived$.next(message));
+    connection.on('GroupCreated', (group: GroupDto) => this.groupCreated$.next(group));
+    connection.on('GroupMemberAdded', (group: GroupDto) => this.groupMemberAdded$.next(group));
+    connection.on('GroupMemberRemoved', (groupId: number, userId: number) =>
+      this.groupMemberRemoved$.next({ groupId, userId })
+    );
+    connection.on('GroupMemberRoleChanged', (groupId: number, userId: number, isAdmin: boolean) =>
+      this.groupMemberRoleChanged$.next({ groupId, userId, isAdmin })
+    );
+    connection.on('GroupRenamed', (groupId: number, name: string) => this.groupRenamed$.next({ groupId, name }));
+    connection.on('GroupDeleted', (groupId: number) => this.groupDeleted$.next(groupId));
 
     await connection.start();
     this.connection = connection;
@@ -65,5 +130,13 @@ export class ChatHub {
     }
 
     return this.connection.invoke('SendMessage', receiverId, text, attachment);
+  }
+
+  sendGroupMessage(groupId: number, text: string, attachment: MessageAttachment | null): Promise<void> {
+    if (!this.connection) {
+      return Promise.reject(new Error('Not connected to chat server.'));
+    }
+
+    return this.connection.invoke('SendGroupMessage', groupId, text, attachment);
   }
 }

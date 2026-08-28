@@ -12,7 +12,9 @@ namespace api.Hubs;
 [Authorize]
 public class ChatHub(ChatDbContext db, CryptoHelper crypto) : Hub
 {
-    private static string UserGroup(int userId) => $"user-{userId}";
+    // Public so GroupsController (REST-triggered group mutations that still need realtime
+    // fan-out) can push to the same per-user personal group via IHubContext<ChatHub>.
+    public static string UserGroup(int userId) => $"user-{userId}";
 
     // The connection is authenticated (see Program.cs), so the caller's identity comes from
     // their JWT's encrypted "sub" claim — never from a value the client passes in directly.
@@ -80,5 +82,45 @@ public class ChatHub(ChatDbContext db, CryptoHelper crypto) : Hub
 
         await Clients.Group(UserGroup(receiverId)).SendAsync("ReceiveMessage", message);
         await Clients.Group(UserGroup(senderId)).SendAsync("ReceiveMessage", message);
+    }
+
+    public async Task SendGroupMessage(int groupId, string? text, MessageAttachment? attachment)
+    {
+        if (string.IsNullOrWhiteSpace(text) && attachment is null)
+        {
+            throw new HubException("Message must include text or an attachment.");
+        }
+
+        var senderId = GetUserId();
+
+        var memberIds = await db.GroupMembers
+            .Where(gm => gm.GroupId == groupId)
+            .Select(gm => gm.UserId)
+            .ToListAsync();
+
+        if (!memberIds.Contains(senderId))
+        {
+            throw new HubException("You are not a member of this group.");
+        }
+
+        var message = new GroupMessage
+        {
+            GroupId = groupId,
+            SenderId = senderId,
+            Text = text ?? string.Empty,
+            SentAt = DateTime.UtcNow,
+            AttachmentUrl = attachment?.Url,
+            AttachmentFileName = attachment?.FileName,
+            AttachmentContentType = attachment?.ContentType,
+            AttachmentSize = attachment?.Size,
+        };
+
+        db.GroupMessages.Add(message);
+        await db.SaveChangesAsync();
+
+        foreach (var memberId in memberIds)
+        {
+            await Clients.Group(UserGroup(memberId)).SendAsync("ReceiveGroupMessage", message);
+        }
     }
 }

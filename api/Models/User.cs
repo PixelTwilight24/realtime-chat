@@ -24,4 +24,13 @@ public class User
 
     [JsonIgnore]
     public List<Message> ReceivedMessages { get; set; } = [];
+
+    [JsonIgnore]
+    public List<GroupMember> GroupMemberships { get; set; } = [];
+
+    [JsonIgnore]
+    public List<GroupMessage> SentGroupMessages { get; set; } = [];
+
+    [JsonIgnore]
+    public List<Group> CreatedGroups { get; set; } = [];
 }
