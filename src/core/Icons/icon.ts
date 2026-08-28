@@ -22,6 +22,12 @@ import {
   faCrown,
   faPlus,
   faPenToSquare,
+  faPhone,
+  faVideo,
+  faThumbtack,
+  faBell,
+  faGear,
+  faImage,
 } from '@fortawesome/free-solid-svg-icons';
 
 export function registerIcons(library: FaIconLibrary) {
@@ -47,6 +53,12 @@ export function registerIcons(library: FaIconLibrary) {
     faUserMinus,
     faCrown,
     faPlus,
-    faPenToSquare
+    faPenToSquare,
+    faPhone,
+    faVideo,
+    faThumbtack,
+    faBell,
+    faGear,
+    faImage
   );
 }

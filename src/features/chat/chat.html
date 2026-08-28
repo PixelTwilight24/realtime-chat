@@ -1,8 +1,8 @@
-<div class="h-dvh flex bg-base-200">
+<div class="h-dvh flex md:gap-4 md:p-4 bg-neutral-950">
 
   <!-- Sidebar -->
   <div
-    class="w-full md:w-80 bg-base-100 border-r border-base-300 flex-col md:flex"
+    class="w-full md:w-80 bg-neutral-950 flex-col md:flex md:rounded-2xl"
     [class.flex]="!selectedUser() && !selectedGroup()"
     [class.hidden]="selectedUser() || selectedGroup()"
   >
@@ -10,27 +10,21 @@
     <div class="px-4 py-4 flex items-center justify-between">
       <h2 class="text-lg font-bold">Chats</h2>
       <div class="flex items-center gap-1">
-        <span class="badge badge-neutral badge-sm">{{ users().length }}</span>
+        
         <button
-          class="btn btn-ghost btn-circle btn-sm"
+          class="btn btn-primary btn-circle btn-sm"
           title="New Group"
           (click)="openCreateGroupModal()"
         >
           <fa-icon icon="plus"></fa-icon>
         </button>
+        <!-- md+: the chat panel's own header carries a "My Profile" avatar button instead. -->
         <button
-          class="btn btn-ghost btn-circle btn-sm"
+          class="btn btn-ghost btn-circle btn-sm md:hidden"
           title="My Profile"
           (click)="openMyProfile()"
         >
           <fa-icon icon="user"></fa-icon>
-        </button>
-        <button
-          class="btn btn-ghost btn-circle btn-sm"
-          title="Logout"
-          (click)="logout()"
-        >
-          <fa-icon icon="right-from-bracket"></fa-icon>
         </button>
       </div>
     </div>
@@ -48,15 +42,17 @@
       </label>
     </div>
 
-    <div class="flex-1 overflow-y-auto px-2 space-y-1 pb-2">
+    <div class="flex-1 overflow-y-auto px-2 space-y-3 pb-2">
 
-      @if (isLoadingUsers()) {
-        <p class="text-sm opacity-60 text-center py-4">Loading contacts…</p>
+      @if (isLoadingUsers() || isLoadingGroups()) {
+        <p class="text-sm opacity-60 text-center py-4">Loading conversations…</p>
       } @else if (usersError()) {
         <p class="text-sm text-error text-center py-4">{{ usersError() }}</p>
-      } @else if (filteredUsers().length === 0) {
+      } @else if (groupsError()) {
+        <p class="text-sm text-error text-center py-4">{{ groupsError() }}</p>
+      } @else if (filteredUsers().length === 0 && filteredGroups().length === 0) {
         @if (searchControl.value?.trim()) {
-          <p class="text-sm opacity-60 text-center py-4">No contacts found</p>
+          <p class="text-sm opacity-60 text-center py-4">No matches found</p>
         } @else {
           <p class="text-sm opacity-60 text-center py-6 px-4">
             No conversations yet.<br />Search for someone to start chatting.
@@ -64,14 +60,20 @@
         }
       } @else {
 
+        <!-- DMs and groups share one unified, unsectioned list — each row is its own
+             floating "bubble" (bg-neutral card) rather than a flat row on the panel bg,
+             for clearer visual separation between conversations. -->
         @for (user of filteredUsers(); track user.id) {
           <div
-            class="flex items-center gap-3 px-2 py-2.5 rounded-xl cursor-pointer transition-colors hover:bg-base-200"
-            [class.bg-base-200]="selectedUser()?.id === user.id"
+            class="flex items-center gap-3 px-2 py-2.5 rounded-xl cursor-pointer transition-colors"
+            [class.bg-primary]="selectedUser()?.id === user.id"
+            [class.text-primary-content]="selectedUser()?.id === user.id"
+            [class.bg-base-100]="selectedUser()?.id !== user.id"
+            [class.hover:bg-base-200]="selectedUser()?.id !== user.id"
             (click)="selectUser(user)"
           >
             <div class="avatar" [class.online]="user.isOnline" [class.offline]="!user.isOnline">
-              <div class="w-11 rounded-full">
+              <div class="w-11 rounded-full border-2" [style.border-color]="avatarAccentColor(user.id)">
                 <img [src]="user.avatar" />
               </div>
             </div>
@@ -83,35 +85,36 @@
           </div>
         }
 
-      }
-
-      @if (groups().length > 0 || isLoadingGroups()) {
-        <p class="text-xs font-semibold uppercase opacity-50 px-2 pt-3 pb-1">Groups</p>
-
-        @if (isLoadingGroups()) {
-          <p class="text-sm opacity-60 text-center py-2">Loading groups…</p>
-        } @else if (groupsError()) {
-          <p class="text-sm text-error text-center py-2">{{ groupsError() }}</p>
-        } @else {
-          @for (group of filteredGroups(); track group.id) {
-            <div
-              class="flex items-center gap-3 px-2 py-2.5 rounded-xl cursor-pointer transition-colors hover:bg-base-200"
-              [class.bg-base-200]="selectedGroup()?.id === group.id"
-              (click)="selectGroup(group)"
-            >
+        @for (group of filteredGroups(); track group.id) {
+          <div
+            class="flex items-center gap-3 px-2 py-2.5 rounded-xl cursor-pointer transition-colors"
+            [class.bg-primary]="selectedGroup()?.id === group.id"
+            [class.text-primary-content]="selectedGroup()?.id === group.id"
+            [class.bg-base-100]="selectedGroup()?.id !== group.id"
+            [class.hover:bg-base-200]="selectedGroup()?.id !== group.id"
+            (click)="selectGroup(group)"
+          >
+            @if (group.avatar) {
+              <div class="avatar">
+                <div class="w-11 rounded-full">
+                  <img [src]="group.avatar" />
+                </div>
+              </div>
+            } @else {
               <div class="avatar placeholder">
-                <div class="w-11 rounded-full bg-neutral text-neutral-content">
+                <div class="w-11 rounded-full bg-base-300 text-neutral-content">
                   <fa-icon icon="users"></fa-icon>
                 </div>
               </div>
+            }
 
-              <div class="min-w-0 flex-1">
-                <p class="font-medium truncate">{{ group.name }}</p>
-                <p class="text-xs opacity-60 truncate">{{ group.lastMessage || (group.memberCount + ' members') }}</p>
-              </div>
+            <div class="min-w-0 flex-1">
+              <p class="font-medium truncate">{{ group.name }}</p>
+              <p class="text-xs opacity-60 truncate">{{ group.lastMessage || (group.memberCount + ' members') }}</p>
             </div>
-          }
+          </div>
         }
+
       }
 
     </div>
@@ -120,65 +123,97 @@
 
   <!-- Chat Area -->
   <div
-    class="flex-1 relative md:m-2 md:flex"
+    class="flex-1 relative md:flex lg:gap-2"
     [class.flex]="selectedUser() || selectedGroup()"
     [class.hidden]="!selectedUser() && !selectedGroup()"
   >
 
-    <div
-    class="flex-1 flex flex-col bg-base-100 min-w-0 md:rounded-l-2xl"
-    [class.md:rounded-r-2xl]="!showSettings"
-    >
+    <div class="flex-1 flex flex-col bg-linear-to-br from-primary/15 via-base-100 to-accent/15 min-w-0 md:rounded-2xl">
 
-        @if (selectedUser() || selectedGroup()) {
+        <!-- Header — always visible (not just when a conversation is open), matching the
+             reference's persistent top bar. -->
+        <div class="p-4 border-b border-base-300 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3 min-w-0">
 
-            <!-- Header -->
-            <div class="p-4 border-b border-base-300 flex items-center justify-between gap-3">
-                <div class="flex items-center gap-3">
-
+                @if (selectedUser() || selectedGroup()) {
                     <button class="btn btn-ghost btn-circle btn-sm md:hidden" (click)="closeConversation()">
                         <fa-icon icon="angle-left"></fa-icon>
                     </button>
+                }
 
-                    @if (selectedGroup(); as group) {
+                @if (selectedGroup(); as group) {
+                    @if (group.avatar) {
+                        <div class="avatar">
+                            <div class="w-10 rounded-full">
+                                <img [src]="group.avatar" />
+                            </div>
+                        </div>
+                    } @else {
                         <div class="avatar placeholder">
                             <div class="w-10 rounded-full bg-neutral text-neutral-content">
                                 <fa-icon icon="users"></fa-icon>
                             </div>
                         </div>
-
-                        <div>
-                            <p class="font-semibold leading-tight">{{ group.name }}</p>
-                            <p class="text-xs opacity-60">{{ group.members.length }} members</p>
-                        </div>
-                    } @else if (selectedUser(); as user) {
-                        <div class="avatar" [class.online]="user.isOnline" [class.offline]="!user.isOnline">
-                            <div class="w-10 rounded-full">
-                                <img [src]="user.avatar" />
-                            </div>
-                        </div>
-
-                        <div>
-                            <p class="font-semibold leading-tight">{{ user.name }}</p>
-                            <p
-                                class="text-xs"
-                                [class.text-success]="user.isOnline"
-                                [class.text-error]="!user.isOnline"
-                            >
-                                {{ user.isOnline ? 'Online' : 'Offline' }}
-                            </p>
-                        </div>
                     }
-                </div>
 
-                <!-- Toggle Settings -->
-                <button class="btn btn-sm btn-ghost btn-circle" (click)="toggleSettings()">
-                    <fa-icon icon="ellipsis"></fa-icon>
-                </button>
+                    <div class="min-w-0">
+                        <p class="font-semibold leading-tight truncate">{{ group.name }}</p>
+                        <p class="text-xs opacity-60">{{ group.members.length }} members</p>
+                    </div>
+                } @else if (selectedUser(); as user) {
+                    <div class="avatar" [class.online]="user.isOnline" [class.offline]="!user.isOnline">
+                        <div class="w-10 rounded-full border-2" [style.border-color]="avatarAccentColor(user.id)">
+                            <img [src]="user.avatar" />
+                        </div>
+                    </div>
+
+                    <div class="min-w-0">
+                        <p class="font-semibold leading-tight truncate">{{ user.name }}</p>
+                        <p
+                            class="text-xs"
+                            [class.text-success]="user.isOnline"
+                            [class.text-error]="!user.isOnline"
+                        >
+                            {{ user.isOnline ? 'Online' : 'Offline' }}
+                        </p>
+                    </div>
+                } @else {
+                    <p class="font-semibold text-lg px-1">Messages</p>
+                }
             </div>
 
+            <div class="flex items-center gap-1 shrink-0">
+                @if (selectedUser() || selectedGroup()) {
+                    <!-- Toggle Settings — mobile/tablet only; the header's gear button covers md+. -->
+                    <button class="btn btn-sm btn-ghost btn-circle lg:hidden" (click)="toggleSettings()">
+                        <fa-icon icon="ellipsis"></fa-icon>
+                    </button>
+                }
+
+                <!-- Hidden below md — mobile's header is already tight on space; mobile/tablet
+                     toggle the same panel via the ellipsis button instead. -->
+                <button class="btn btn-ghost btn-circle btn-sm hidden md:inline-flex" title="Settings" (click)="toggleSettings()">
+                    <fa-icon icon="gear"></fa-icon>
+                </button>
+                <!-- Decorative, no real notifications feature behind this. -->
+                <button class="btn btn-ghost btn-circle btn-sm hidden md:inline-flex" title="Notifications" disabled>
+                    <fa-icon icon="bell"></fa-icon>
+                </button>
+
+                <button class="btn btn-ghost btn-circle" title="My Profile" (click)="openMyProfile()">
+                    <div class="avatar">
+                        <div class="w-8 rounded-full border-2" [style.border-color]="avatarAccentColor(currentUserId)">
+                            <img [src]="myAvatarUrl()" />
+                        </div>
+                    </div>
+                </button>
+            </div>
+        </div>
+
+        @if (selectedUser() || selectedGroup()) {
+
             <!-- Messages -->
-            <div class="flex-1 overflow-y-auto p-4 space-y-2">
+            <div class="flex-1 overflow-y-auto p-4 bg-base-100/40 backdrop-blur-xl">
 
             @if (isLoadingMessages()) {
                 <p class="text-sm opacity-60 text-center py-4">Loading messages…</p>
@@ -186,48 +221,57 @@
                 <p class="text-sm opacity-60 text-center py-4">No messages yet. Say hello!</p>
             } @else {
 
-                @for (msg of messages(); track msg.id) {
-                    <div
-                    class="chat"
-                    [class.chat-end]="msg.isMine"
-                    [class.chat-start]="!msg.isMine"
-                    >
-                    @if (selectedGroup() && !msg.isMine) {
-                        <div class="chat-image avatar">
-                            <div class="w-8 rounded-full">
-                                <img [src]="groupMemberById(msg.senderId!)?.avatar" />
-                            </div>
-                        </div>
-                        <div class="chat-header text-xs opacity-60 mb-0.5">
-                            {{ groupMemberById(msg.senderId!)?.name }}
+                @for (msg of messages(); track msg.id; let i = $index) {
+
+                    @if (isNewDay(i)) {
+                        <div class="flex items-center justify-center py-3">
+                            <span class="badge badge-neutral badge-sm">{{ formatDateDivider(msg.sentAt) }}</span>
                         </div>
                     }
-                    <div
-                        class="chat-bubble max-w-xs md:max-w-md wrap-break-word"
-                        [class.chat-bubble-primary]="msg.isMine"
-                    >
-                        @if (msg.attachment; as attachment) {
-                            @if (attachment.contentType.startsWith('image/')) {
-                                <a [href]="attachment.url" target="_blank" rel="noopener" class="block mb-1">
-                                    <img [src]="attachment.url" class="rounded-lg max-w-full max-h-64" />
-                                </a>
-                            } @else {
-                                <a
-                                    [href]="attachment.url"
-                                    target="_blank"
-                                    rel="noopener"
-                                    class="flex items-center gap-2 bg-black/10 rounded-lg px-3 py-2 mb-1"
-                                >
-                                    <fa-icon icon="file"></fa-icon>
-                                    <span class="flex-1 min-w-0 truncate text-sm">{{ attachment.fileName }}</span>
-                                    <fa-icon icon="download" class="text-xs opacity-70"></fa-icon>
-                                </a>
+
+                    <div class="flex gap-3" [class.mt-3]="!isGroupedWithPrevious(i)" [class.mt-0.5]="isGroupedWithPrevious(i)">
+
+                        <div class="w-9 shrink-0">
+                            @if (!isGroupedWithPrevious(i)) {
+                                <div class="avatar">
+                                    <div class="w-9 rounded-full border-2" [style.border-color]="avatarAccentColor(senderIdFor(msg))">
+                                        <img [src]="senderAvatarFor(msg)" />
+                                    </div>
+                                </div>
                             }
-                        }
-                        @if (msg.text) {
-                            <div>{{ msg.text }}</div>
-                        }
-                    </div>
+                        </div>
+
+                        <div class="min-w-0 flex-1">
+                            @if (!isGroupedWithPrevious(i)) {
+                                <div class="flex items-baseline gap-2">
+                                    <span class="font-semibold text-sm">{{ senderNameFor(msg) }}</span>
+                                    <span class="text-xs opacity-50">{{ formatMessageTime(msg.sentAt) }}</span>
+                                </div>
+                            }
+
+                            @if (msg.attachment; as attachment) {
+                                @if (attachment.contentType.startsWith('image/')) {
+                                    <a [href]="attachment.url" target="_blank" rel="noopener" class="block mt-1 max-w-xs text-base-content">
+                                        <img [src]="attachment.url" class="rounded-lg max-w-full max-h-64" />
+                                    </a>
+                                } @else {
+                                    <a
+                                        [href]="attachment.url"
+                                        target="_blank"
+                                        rel="noopener"
+                                        class="flex items-center gap-2 bg-neutral text-neutral-content rounded-lg px-3 py-2 mt-1 max-w-xs no-underline"
+                                    >
+                                        <fa-icon icon="file"></fa-icon>
+                                        <span class="flex-1 min-w-0 truncate text-sm">{{ attachment.fileName }}</span>
+                                        <fa-icon icon="download" class="text-xs opacity-70"></fa-icon>
+                                    </a>
+                                }
+                            }
+                            @if (msg.text) {
+                                <p class="text-sm wrap-break-word">{{ msg.text }}</p>
+                            }
+                        </div>
+
                     </div>
                 }
 
@@ -323,9 +367,11 @@
       <div class="fixed inset-0 bg-black/40 z-30 lg:hidden" (click)="toggleSettings()"></div>
     }
 
-    <!-- Settings Panel -->
+    <!-- Settings Panel — overlay drawer below lg, static in-flow card at lg+; visibility is
+         driven by showSettings at every breakpoint (toggled via the ellipsis button below lg,
+         and the header's Settings gear at md+). -->
     <div
-    class="fixed inset-y-0 right-0 z-40 w-72 max-w-[85vw] overflow-y-auto bg-base-100 border-l rounded-r-2xl border-base-300 p-4 shadow-xl transition-transform duration-300 lg:static lg:z-auto lg:w-80 lg:max-w-none lg:shadow-none lg:translate-x-0"
+    class="fixed inset-y-0 right-0 z-40 w-72 max-w-[85vw] overflow-y-auto bg-base-100 rounded-l-2xl p-4 shadow-xl transition-transform duration-300 lg:static lg:z-auto lg:w-80 lg:max-w-none lg:rounded-2xl lg:shadow-none lg:translate-x-0"
     [class.hidden]="!showSettings"
     [class.translate-x-full]="!showSettings"
     >
@@ -337,15 +383,59 @@
         </button>
     </div>
 
+    <!-- Decorative icon toolbar — no call/video/pin feature exists yet. -->
+    <div class="flex items-center justify-center gap-2 mb-4">
+        <button class="btn btn-circle btn-sm btn-ghost" title="Call" disabled>
+            <fa-icon icon="phone"></fa-icon>
+        </button>
+        <button class="btn btn-circle btn-sm btn-ghost" title="Video call" disabled>
+            <fa-icon icon="video"></fa-icon>
+        </button>
+        <button class="btn btn-circle btn-sm btn-ghost" title="Pinned messages" disabled>
+            <fa-icon icon="thumbtack"></fa-icon>
+        </button>
+        <button class="btn btn-circle btn-sm btn-ghost" title="Members" disabled>
+            <fa-icon icon="users"></fa-icon>
+        </button>
+    </div>
+
     @if (selectedGroup(); as group) {
 
         <div class="flex flex-col items-center text-center">
 
-        <div class="avatar placeholder mb-3">
-            <div class="w-20 rounded-full bg-neutral text-neutral-content">
-                <fa-icon icon="users" class="text-2xl"></fa-icon>
+        @if (group.avatar) {
+            <div class="avatar mb-3">
+                <div class="w-20 rounded-full">
+                    <img [src]="group.avatar" />
+                </div>
             </div>
-        </div>
+        } @else {
+            <div class="avatar placeholder mb-3">
+                <div class="w-20 rounded-full bg-neutral text-neutral-content">
+                    <fa-icon icon="users" class="text-2xl"></fa-icon>
+                </div>
+            </div>
+        }
+
+        @if (isGroupAdmin()) {
+            <input #groupAvatarInput type="file" accept="image/*" class="hidden" (change)="onGroupAvatarSelected($event)" />
+            <button
+                type="button"
+                class="btn btn-ghost btn-xs gap-1 mb-1"
+                [disabled]="isUploadingGroupAvatar()"
+                (click)="groupAvatarInput.click()"
+            >
+                @if (isUploadingGroupAvatar()) {
+                    <span class="loading loading-spinner loading-xs"></span>
+                } @else {
+                    <fa-icon icon="pen-to-square"></fa-icon>
+                }
+                Change Photo
+            </button>
+            @if (groupAvatarError()) {
+                <p class="text-error text-xs mb-1">{{ groupAvatarError() }}</p>
+            }
+        }
 
         <p class="font-semibold text-lg">{{ group.name }}</p>
         <p class="text-sm opacity-60">{{ group.members.length }} members</p>
@@ -368,17 +458,16 @@
             @for (member of group.members; track member.userId) {
                 <div class="flex items-center gap-2 px-1 py-1.5">
                     <div class="avatar" [class.online]="member.isOnline" [class.offline]="!member.isOnline">
-                        <div class="w-8 rounded-full">
+                        <div class="w-8 rounded-full border-2" [style.border-color]="avatarAccentColor(member.userId)">
                             <img [src]="member.avatar" />
                         </div>
                     </div>
 
-                    <div class="min-w-0 flex-1 flex items-center gap-1">
-                        <span class="text-sm truncate">{{ member.name }}</span>
-                        @if (member.isAdmin) {
-                            <fa-icon icon="crown" class="text-warning text-xs" title="Admin"></fa-icon>
-                        }
-                    </div>
+                    <span class="text-sm truncate flex-1">{{ member.name }}</span>
+
+                    @if (member.isAdmin) {
+                        <span class="badge badge-sm badge-primary">Admin</span>
+                    }
 
                     @if (isGroupAdmin() && member.userId !== currentUserId) {
                         @if (member.isAdmin) {
@@ -405,7 +494,7 @@
                 @for (user of addableMembers(); track user.id) {
                     <div class="flex items-center gap-2 px-1 py-1.5">
                         <div class="avatar">
-                            <div class="w-8 rounded-full">
+                            <div class="w-8 rounded-full border-2" [style.border-color]="avatarAccentColor(user.id)">
                                 <img [src]="user.avatar" />
                             </div>
                         </div>
@@ -417,6 +506,31 @@
                 }
             </div>
         }
+
+        <!-- Static — no real file-gallery feature exists yet, purely decorative. -->
+        <div class="divider">Files</div>
+
+        <div class="space-y-2 text-sm">
+            <div class="flex items-center justify-between px-1">
+                <span class="flex items-center gap-2 opacity-80"><fa-icon icon="image"></fa-icon> 12 photos</span>
+                <fa-icon icon="angle-left" class="rotate-90 opacity-50 text-xs"></fa-icon>
+            </div>
+            <div class="grid grid-cols-3 gap-1.5">
+                <div class="aspect-square rounded-lg bg-linear-to-br from-primary/40 to-accent/30"></div>
+                <div class="aspect-square rounded-lg bg-linear-to-br from-accent/30 to-primary/20"></div>
+                <div class="aspect-square rounded-lg bg-linear-to-br from-primary/20 to-base-300"></div>
+            </div>
+
+            <div class="flex items-center justify-between px-1 pt-1">
+                <span class="flex items-center gap-2 opacity-80"><fa-icon icon="file"></fa-icon> 24 files</span>
+                <fa-icon icon="angle-left" class="rotate-90 opacity-50 text-xs"></fa-icon>
+            </div>
+
+            <div class="flex items-center justify-between px-1">
+                <span class="flex items-center gap-2 opacity-80"><fa-icon icon="paperclip"></fa-icon> 8 shared links</span>
+                <fa-icon icon="angle-left" class="rotate-90 opacity-50 text-xs"></fa-icon>
+            </div>
+        </div>
 
         <div class="divider"></div>
 
@@ -442,7 +556,7 @@
         <div class="flex flex-col items-center text-center">
 
         <div class="avatar mb-3" [class.online]="user.isOnline" [class.offline]="!user.isOnline">
-            <div class="w-20 rounded-full">
+            <div class="w-20 rounded-full border-2" [style.border-color]="avatarAccentColor(user.id)">
             <img [src]="user.avatar" />
             </div>
         </div>
@@ -484,6 +598,32 @@
 
         </div>
 
+        <!-- Static — no real file-gallery feature exists yet, purely decorative. -->
+        <div class="divider">Files</div>
+
+        <div class="space-y-2 text-sm">
+            <div class="flex items-center justify-between px-1">
+                <span class="flex items-center gap-2 opacity-80"><fa-icon icon="image"></fa-icon> 6 photos</span>
+                <fa-icon icon="angle-left" class="rotate-90 opacity-50 text-xs"></fa-icon>
+            </div>
+            <div class="grid grid-cols-3 gap-1.5">
+                <div class="aspect-square rounded-lg bg-linear-to-br from-primary/40 to-accent/30"></div>
+                <div class="aspect-square rounded-lg bg-linear-to-br from-accent/30 to-primary/20"></div>
+                <div class="aspect-square rounded-lg bg-linear-to-br from-primary/20 to-base-300"></div>
+            </div>
+
+            <div class="flex items-center justify-between px-1 pt-1">
+                <span class="flex items-center gap-2 opacity-80"><fa-icon icon="file"></fa-icon> 9 files</span>
+                <fa-icon icon="angle-left" class="rotate-90 opacity-50 text-xs"></fa-icon>
+            </div>
+
+            <div class="flex items-center justify-between px-1">
+                <span class="flex items-center gap-2 opacity-80"><fa-icon icon="paperclip"></fa-icon> 3 shared links</span>
+                <fa-icon icon="angle-left" class="rotate-90 opacity-50 text-xs"></fa-icon>
+            </div>
+
+        </div>
+
     } @else {
 
         <p class="text-sm opacity-60 text-center">
@@ -519,7 +659,7 @@
         <div class="flex flex-col items-center text-center">
 
           <div class="avatar mb-3" [class.online]="user.isOnline" [class.offline]="!user.isOnline">
-            <div class="w-20 rounded-full">
+            <div class="w-20 rounded-full border-2" [style.border-color]="avatarAccentColor(user.id)">
               <img [src]="user.avatar" />
             </div>
           </div>
@@ -564,6 +704,14 @@
                 >
               Edit Profile
             </button>
+
+            <button
+                class="btn btn-outline w-full btn-sm gap-2"
+                (click)="logout()"
+                >
+              <fa-icon icon="right-from-bracket"></fa-icon>
+              Logout
+            </button>
           }
 
           <button
@@ -582,12 +730,30 @@
 
         <form [formGroup]="profileForm" (ngSubmit)="saveProfile()" class="space-y-4">
 
-          <div class="flex justify-center">
+          <div class="flex flex-col items-center gap-1">
             <div class="avatar">
-              <div class="w-20 rounded-full">
-                <img [src]="profileForm.value.avatar || user.avatar" />
+              <div class="w-20 rounded-full border-2" [style.border-color]="avatarAccentColor(user.id)">
+                <img [src]="resolveAvatarUrl(profileForm.value.avatar) || user.avatar" />
               </div>
             </div>
+
+            <input #profileAvatarInput type="file" accept="image/*" class="hidden" (change)="onProfileAvatarSelected($event)" />
+            <button
+                type="button"
+                class="btn btn-ghost btn-xs gap-1"
+                [disabled]="isUploadingAvatar()"
+                (click)="profileAvatarInput.click()"
+                >
+              @if (isUploadingAvatar()) {
+                <span class="loading loading-spinner loading-xs"></span>
+              } @else {
+                <fa-icon icon="pen-to-square"></fa-icon>
+              }
+              Change Photo
+            </button>
+            @if (avatarUploadError()) {
+              <p class="text-error text-xs">{{ avatarUploadError() }}</p>
+            }
           </div>
 
           <div class="form-control">
@@ -609,17 +775,6 @@
               type="text"
               class="input input-bordered w-full"
               formControlName="gender"
-            />
-          </div>
-
-          <div class="form-control">
-            <label class="label">
-              <span class="label-text">Avatar URL</span>
-            </label>
-            <input
-              type="text"
-              class="input input-bordered w-full"
-              formControlName="avatar"
             />
           </div>
 
@@ -691,12 +846,12 @@
             <label class="flex items-center gap-2 px-1 py-1.5 cursor-pointer hover:bg-base-200 rounded">
               <input
                 type="checkbox"
-                class="checkbox checkbox-sm"
+                class="checkbox checkbox-sm checkbox-primary"
                 [checked]="isGroupMemberSelected(u.id)"
                 (change)="toggleGroupMemberSelection(u.id)"
               />
               <div class="avatar">
-                <div class="w-7 rounded-full">
+                <div class="w-7 rounded-full border-2" [style.border-color]="avatarAccentColor(u.id)">
                   <img [src]="u.avatar" />
                 </div>
               </div>

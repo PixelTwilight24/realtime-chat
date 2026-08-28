@@ -16,6 +16,7 @@ import {
   GroupMemberRemoved,
   GroupMemberRoleChanged,
   GroupRenamedEvent,
+  GroupAvatarChangedEvent,
 } from '../../core/services/chat-hub';
 
 interface User {
@@ -39,6 +40,7 @@ interface ConversationSummary {
   user: Omit<User, 'lastMessage'>;
   lastMessagePreview: string;
   lastMessageAt: string;
+  isLastMessageMine: boolean;
 }
 
 interface Message {
@@ -47,6 +49,7 @@ interface Message {
   isMine: boolean;
   attachment: Attachment | null;
   senderId?: number;
+  sentAt: string;
 }
 
 interface GroupMember {
@@ -60,6 +63,7 @@ interface GroupMember {
 interface Group {
   id: number;
   name: string;
+  avatar: string | null;
   createdById: number;
   members: GroupMember[];
 }
@@ -67,6 +71,7 @@ interface Group {
 interface GroupListItem {
   id: number;
   name: string;
+  avatar: string | null;
   lastMessage: string;
   memberCount: number;
 }
@@ -74,8 +79,10 @@ interface GroupListItem {
 interface GroupSummary {
   id: number;
   name: string;
+  avatar: string | null;
   lastMessagePreview: string;
   lastMessageAt: string | null;
+  isLastMessageMine: boolean;
   memberCount: number;
 }
 
@@ -106,6 +113,8 @@ export class Chat implements OnInit {
   isEditingProfile = signal(false);
   isSavingProfile = signal(false);
   profileSaveError = signal<string | null>(null);
+  isUploadingAvatar = signal(false);
+  avatarUploadError = signal<string | null>(null);
 
   profileForm = new FormGroup({
     name: new FormControl('', [Validators.required]),
@@ -160,6 +169,9 @@ export class Chat implements OnInit {
   isCreatingGroup = signal(false);
   createGroupError = signal<string | null>(null);
 
+  isUploadingGroupAvatar = signal(false);
+  groupAvatarError = signal<string | null>(null);
+
   filteredGroups = computed(() => {
     const term = (this.searchTerm() ?? '').trim().toLowerCase();
     if (!term) return this.groups();
@@ -185,6 +197,25 @@ export class Chat implements OnInit {
   get canSend(): boolean {
     const hasText = !!this.chatForm.value.message?.trim();
     return this.hubConnected() && !this.isUploadingFile() && (hasText || !!this.pendingFile());
+  }
+
+  // Avatars are stored as either a relative /uploads/... path from our own upload endpoint
+  // (kept domain-free so it stays valid if the site's origin ever changes — resolved to a
+  // full URL only here, at render/use time) or an absolute external URL (e.g. seeded
+  // pravatar.cc avatars), which is passed through unchanged.
+  resolveAvatarUrl(avatar: string): string;
+  resolveAvatarUrl(avatar: string | null | undefined): string | null;
+  resolveAvatarUrl(avatar: string | null | undefined): string | null {
+    if (!avatar) return null;
+    return avatar.startsWith('http://') || avatar.startsWith('https://') ? avatar : `${API_ORIGIN}${avatar}`;
+  }
+
+  // Inverse of resolveAvatarUrl, for values coming FROM the form (which may already hold an
+  // own-origin-resolved URL carried over from an unmodified profileUser()) back to the
+  // relative form the server expects — otherwise re-saving a profile without changing the
+  // photo would "re-absolutize" it and defeat the point of storing it relatively.
+  private toStoredAvatarValue(avatar: string): string {
+    return avatar.startsWith(API_ORIGIN) ? avatar.slice(API_ORIGIN.length) : avatar;
   }
 
   ngOnInit() {
@@ -230,6 +261,10 @@ export class Chat implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((event) => this.handleGroupRenamed(event));
 
+    this.chatHub.groupAvatarChanged$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((event) => this.handleGroupAvatarChanged(event));
+
     this.chatHub.groupDeleted$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((groupId) => this.handleGroupDeleted(groupId));
@@ -257,7 +292,11 @@ export class Chat implements OnInit {
       next: (conversations) => {
         // Already ordered by most recent message by the API — preserve that order.
         this.users.set(
-          conversations.map((c) => ({ ...c.user, lastMessage: c.lastMessagePreview }))
+          conversations.map((c) => ({
+            ...c.user,
+            avatar: this.resolveAvatarUrl(c.user.avatar),
+            lastMessage: c.isLastMessageMine ? `You: ${c.lastMessagePreview}` : c.lastMessagePreview,
+          }))
         );
         this.isLoadingUsers.set(false);
       },
@@ -274,7 +313,7 @@ export class Chat implements OnInit {
         this.directoryUsers.set(
           users
             .filter((user) => user.id !== this.currentUserId)
-            .map((user) => ({ ...user, lastMessage: '' }))
+            .map((user) => ({ ...user, avatar: this.resolveAvatarUrl(user.avatar), lastMessage: '' }))
         );
       },
     });
@@ -299,7 +338,13 @@ export class Chat implements OnInit {
     this.http.get<GroupSummary[]>(`${API_BASE_URL}/groups`).subscribe({
       next: (groups) => {
         this.groups.set(
-          groups.map((g) => ({ id: g.id, name: g.name, lastMessage: g.lastMessagePreview, memberCount: g.memberCount }))
+          groups.map((g) => ({
+            id: g.id,
+            name: g.name,
+            avatar: this.resolveAvatarUrl(g.avatar),
+            lastMessage: g.isLastMessageMine ? `You: ${g.lastMessagePreview}` : g.lastMessagePreview,
+            memberCount: g.memberCount,
+          }))
         );
         this.isLoadingGroups.set(false);
       },
@@ -318,7 +363,7 @@ export class Chat implements OnInit {
     // guard already matches this group's id no matter which of the two requests below
     // resolves first — otherwise a first click can get stuck on "Loading messages…" if the
     // history response beats the group-details response back.
-    this.selectedGroup.set({ id: item.id, name: item.name, createdById: 0, members: [] });
+    this.selectedGroup.set({ id: item.id, name: item.name, avatar: item.avatar, createdById: 0, members: [] });
 
     if (this.directoryUsers() === null) {
       this.loadDirectoryUsers();
@@ -335,11 +380,12 @@ export class Chat implements OnInit {
     return {
       id: dto.id,
       name: dto.name,
+      avatar: this.resolveAvatarUrl(dto.avatar),
       createdById: dto.createdById,
       members: dto.members.map((m) => ({
         userId: m.userId,
         name: m.name,
-        avatar: m.avatar,
+        avatar: this.resolveAvatarUrl(m.avatar),
         isOnline: m.isOnline,
         isAdmin: m.isAdmin,
       })),
@@ -371,6 +417,7 @@ export class Chat implements OnInit {
       text: message.text,
       isMine: message.senderId === this.currentUserId,
       senderId: message.senderId,
+      sentAt: message.sentAt,
       attachment: message.attachmentUrl
         ? {
             url: `${API_ORIGIN}${message.attachmentUrl}`,
@@ -385,6 +432,71 @@ export class Chat implements OnInit {
   groupMemberById(userId: number): GroupMember | undefined {
     return this.selectedGroup()?.members.find((m) => m.userId === userId);
   }
+
+  // Who a message came from, unified across DMs and groups so the flat message list can
+  // render the same header row (avatar + name) either way.
+  senderNameFor(msg: Message): string {
+    if (this.selectedGroup()) return this.groupMemberById(msg.senderId ?? -1)?.name ?? 'Unknown';
+    return msg.isMine ? (this.auth.getUser()?.name ?? 'You') : (this.selectedUser()?.name ?? '');
+  }
+
+  senderAvatarFor(msg: Message): string | null {
+    if (this.selectedGroup()) return this.groupMemberById(msg.senderId ?? -1)?.avatar ?? null;
+    return msg.isMine
+      ? this.resolveAvatarUrl(this.auth.getUser()?.avatar)
+      : (this.selectedUser()?.avatar ?? null);
+  }
+
+  private senderKeyFor(msg: Message): number | string {
+    return this.selectedGroup() ? (msg.senderId ?? -1) : msg.isMine ? 'me' : 'them';
+  }
+
+  senderIdFor(msg: Message): number {
+    if (this.selectedGroup()) return msg.senderId ?? -1;
+    return msg.isMine ? this.currentUserId : (this.selectedUser()?.id ?? -1);
+  }
+
+  private isSameDay(a: string, b: string): boolean {
+    return new Date(a).toDateString() === new Date(b).toDateString();
+  }
+
+  // Consecutive messages from the same sender on the same day collapse into one visual
+  // group (no repeated avatar/name), matching a flat Slack/Discord-style message list.
+  isGroupedWithPrevious(index: number): boolean {
+    const list = this.messages();
+    if (index === 0) return false;
+
+    const prev = list[index - 1];
+    const curr = list[index];
+    return this.senderKeyFor(prev) === this.senderKeyFor(curr) && this.isSameDay(prev.sentAt, curr.sentAt);
+  }
+
+  isNewDay(index: number): boolean {
+    const list = this.messages();
+    if (index === 0) return true;
+
+    return !this.isSameDay(list[index - 1].sentAt, list[index].sentAt);
+  }
+
+  formatMessageTime(sentAt: string): string {
+    return new Date(sentAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+
+  formatDateDivider(sentAt: string): string {
+    return new Date(sentAt).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  // Decorative per-user ring color (not persisted data) — just enough variety to match the
+  // colorful-avatar look without needing a real per-user color setting.
+  private readonly avatarAccentPalette = ['#F5A25D', '#4FD1C5', '#F472B6', '#60A5FA', '#A78BFA', '#FBBF24'];
+
+  avatarAccentColor(userId: number): string {
+    return this.avatarAccentPalette[Math.abs(userId) % this.avatarAccentPalette.length];
+  }
+
+  // Purely decorative — this app has no multi-workspace concept, these are static
+  // placeholders matching the reference layout's icon rail, not real navigation.
+  readonly staticWorkspaceTiles = ['W', 'C', 'S', 'B', 'M', 'G'];
 
   private loadHistory(otherUserId: number) {
     this.isLoadingMessages.set(true);
@@ -412,6 +524,7 @@ export class Chat implements OnInit {
       id: message.id,
       text: message.text,
       isMine: message.senderId === this.currentUserId,
+      sentAt: message.sentAt,
       attachment: message.attachmentUrl
         ? {
             url: `${API_ORIGIN}${message.attachmentUrl}`,
@@ -423,15 +536,15 @@ export class Chat implements OnInit {
     };
   }
 
-  private previewTextFor(message: { text: string; attachmentFileName: string | null }): string {
-    if (message.text) return message.text;
-    if (message.attachmentFileName) return `📎 ${message.attachmentFileName}`;
-    return '';
+  private previewTextFor(message: { text: string; attachmentFileName: string | null }, isMine: boolean): string {
+    const body = message.text ? message.text : message.attachmentFileName ? `📎 ${message.attachmentFileName}` : '';
+    return isMine && body ? `You: ${body}` : body;
   }
 
   private handleIncomingMessage(message: HubMessage) {
-    const otherPartyId = message.senderId === this.currentUserId ? message.receiverId : message.senderId;
-    const preview = this.previewTextFor(message);
+    const isMine = message.senderId === this.currentUserId;
+    const otherPartyId = isMine ? message.receiverId : message.senderId;
+    const preview = this.previewTextFor(message, isMine);
 
     const existing = this.users().find((user) => user.id === otherPartyId);
     if (existing) {
@@ -448,7 +561,9 @@ export class Chat implements OnInit {
       if (known && known.id === otherPartyId) {
         addUser(known);
       } else {
-        this.http.get<User>(`${API_BASE_URL}/users/${otherPartyId}`).subscribe((user) => addUser(user));
+        this.http
+          .get<User>(`${API_BASE_URL}/users/${otherPartyId}`)
+          .subscribe((user) => addUser({ ...user, avatar: this.resolveAvatarUrl(user.avatar) }));
       }
     }
 
@@ -466,7 +581,7 @@ export class Chat implements OnInit {
   // (GroupCreated/GroupMemberAdded already added it to `groups()`), so unlike DMs there's
   // no "unknown conversation" fallback fetch needed here.
   private handleIncomingGroupMessage(message: HubGroupMessage) {
-    const preview = this.previewTextFor(message);
+    const preview = this.previewTextFor(message, message.senderId === this.currentUserId);
 
     this.groups.update((list) => {
       const existing = list.find((g) => g.id === message.groupId);
@@ -490,6 +605,7 @@ export class Chat implements OnInit {
       const item: GroupListItem = {
         id: dto.id,
         name: dto.name,
+        avatar: this.resolveAvatarUrl(dto.avatar),
         lastMessage: existing?.lastMessage ?? '',
         memberCount: dto.members.length,
       };
@@ -542,6 +658,15 @@ export class Chat implements OnInit {
     }
   }
 
+  private handleGroupAvatarChanged({ groupId, avatar }: GroupAvatarChangedEvent) {
+    const resolved = this.resolveAvatarUrl(avatar);
+    this.groups.update((list) => list.map((g) => (g.id === groupId ? { ...g, avatar: resolved } : g)));
+
+    if (this.selectedGroup()?.id === groupId) {
+      this.selectedGroup.update((group) => (group ? { ...group, avatar: resolved } : group));
+    }
+  }
+
   private handleGroupDeleted(groupId: number) {
     this.groups.update((list) => list.filter((g) => g.id !== groupId));
     if (this.selectedGroup()?.id === groupId) {
@@ -584,6 +709,13 @@ export class Chat implements OnInit {
     formData.append('file', file);
 
     return firstValueFrom(this.http.post<MessageAttachment>(`${API_BASE_URL}/files/upload`, formData));
+  }
+
+  // Returns the raw relative path (e.g. /uploads/xxx.jpg) — callers store this as-is;
+  // resolveAvatarUrl() turns it into a displayable absolute URL.
+  private async uploadAvatarFile(file: File): Promise<string> {
+    const attachment = await this.uploadPendingFile(file);
+    return attachment.url;
   }
 
   async sendMessage() {
@@ -669,7 +801,13 @@ export class Chat implements OnInit {
         this.upsertGroupFromDto(dto);
         this.isCreatingGroup.set(false);
         this.showCreateGroupModal.set(false);
-        this.selectGroup({ id: dto.id, name: dto.name, lastMessage: '', memberCount: dto.members.length });
+        this.selectGroup({
+          id: dto.id,
+          name: dto.name,
+          avatar: this.resolveAvatarUrl(dto.avatar),
+          lastMessage: '',
+          memberCount: dto.members.length,
+        });
       },
       error: () => {
         this.createGroupError.set('Unable to create group. Please try again.');
@@ -717,6 +855,33 @@ export class Chat implements OnInit {
     this.http.put<GroupDto>(`${API_BASE_URL}/groups/${group.id}`, { name: trimmed }).subscribe({
       next: (dto) => this.upsertGroupFromDto(dto),
     });
+  }
+
+  async onGroupAvatarSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+
+    const group = this.selectedGroup();
+    if (!group) return;
+
+    this.groupAvatarError.set(null);
+
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      this.groupAvatarError.set('File exceeds the 15 MB limit.');
+      return;
+    }
+
+    this.isUploadingGroupAvatar.set(true);
+    try {
+      const avatar = await this.uploadAvatarFile(file);
+      await firstValueFrom(this.http.put<GroupDto>(`${API_BASE_URL}/groups/${group.id}/avatar`, { avatar }));
+    } catch {
+      this.groupAvatarError.set('Failed to upload photo. Please try again.');
+    } finally {
+      this.isUploadingGroupAvatar.set(false);
+    }
   }
 
   leaveGroup() {
@@ -768,9 +933,13 @@ export class Chat implements OnInit {
     const me = this.auth.getUser();
     if (!me) return;
 
-    this.profileUser.set({ ...me, lastMessage: '' });
+    this.profileUser.set({ ...me, avatar: this.resolveAvatarUrl(me.avatar), lastMessage: '' });
     this.isOwnProfile.set(true);
     this.showProfileModal = true;
+  }
+
+  myAvatarUrl(): string | null {
+    return this.resolveAvatarUrl(this.auth.getUser()?.avatar);
   }
 
   closeProfile() {
@@ -797,6 +966,30 @@ export class Chat implements OnInit {
     this.profileSaveError.set(null);
   }
 
+  async onProfileAvatarSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+
+    this.avatarUploadError.set(null);
+
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      this.avatarUploadError.set('File exceeds the 15 MB limit.');
+      return;
+    }
+
+    this.isUploadingAvatar.set(true);
+    try {
+      const avatar = await this.uploadAvatarFile(file);
+      this.profileForm.patchValue({ avatar });
+    } catch {
+      this.avatarUploadError.set('Failed to upload photo. Please try again.');
+    } finally {
+      this.isUploadingAvatar.set(false);
+    }
+  }
+
   saveProfile() {
     if (this.profileForm.invalid) return;
 
@@ -805,9 +998,14 @@ export class Chat implements OnInit {
     this.isSavingProfile.set(true);
     this.profileSaveError.set(null);
 
-    this.http.put<User>(`${API_BASE_URL}/users/me`, { name, gender, avatar: avatar }).subscribe({
+    // Strip an own-origin prefix back off before sending — profileForm may still hold the
+    // already-resolved avatar carried over from profileUser() when the photo wasn't changed
+    // in this edit, and the server always stores (and later re-resolves) the relative form.
+    const storedAvatar = this.toStoredAvatarValue(avatar ?? '');
+
+    this.http.put<User>(`${API_BASE_URL}/users/me`, { name, gender, avatar: storedAvatar }).subscribe({
       next: (updated) => {
-        const updatedUser: User = { ...updated, lastMessage: '' };
+        const updatedUser: User = { ...updated, avatar: this.resolveAvatarUrl(updated.avatar), lastMessage: '' };
 
         this.profileUser.set(updatedUser);
         this.auth.updateStoredUser({

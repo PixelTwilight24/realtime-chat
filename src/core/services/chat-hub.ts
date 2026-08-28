@@ -40,6 +40,7 @@ export interface GroupMemberDto {
 export interface GroupDto {
   id: number;
   name: string;
+  avatar: string | null;
   createdById: number;
   createdAt: string;
   members: GroupMemberDto[];
@@ -73,6 +74,11 @@ export interface GroupRenamedEvent {
   name: string;
 }
 
+export interface GroupAvatarChangedEvent {
+  groupId: number;
+  avatar: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ChatHub {
   private auth = inject(Auth);
@@ -87,6 +93,7 @@ export class ChatHub {
   readonly groupMemberRemoved$ = new Subject<GroupMemberRemoved>();
   readonly groupMemberRoleChanged$ = new Subject<GroupMemberRoleChanged>();
   readonly groupRenamed$ = new Subject<GroupRenamedEvent>();
+  readonly groupAvatarChanged$ = new Subject<GroupAvatarChangedEvent>();
   readonly groupDeleted$ = new Subject<number>();
 
   async connect(): Promise<void> {
@@ -112,6 +119,9 @@ export class ChatHub {
       this.groupMemberRoleChanged$.next({ groupId, userId, isAdmin })
     );
     connection.on('GroupRenamed', (groupId: number, name: string) => this.groupRenamed$.next({ groupId, name }));
+    connection.on('GroupAvatarChanged', (groupId: number, avatar: string) =>
+      this.groupAvatarChanged$.next({ groupId, avatar })
+    );
     connection.on('GroupDeleted', (groupId: number) => this.groupDeleted$.next(groupId));
 
     await connection.start();

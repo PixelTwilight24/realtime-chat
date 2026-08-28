@@ -2,3 +2,32 @@
 
 @import 'tailwindcss';
 @plugin "daisyui";
+
+@plugin "daisyui/theme" {
+  name: "icg";
+  default: true;
+  color-scheme: dark;
+  --color-base-100: #151517;   /* panel surfaces (sidebar, chat, right panel) */
+  --color-base-200: #09090a;   /* outer canvas the panels float on — much darker than the
+                                   panels themselves, for real depth instead of a flat look */
+  --color-base-300: #030303;   /* darkest recess / dividers */
+  --color-base-content: #f2f2f3;
+  --color-primary: #d6f24b;    /* lime accent — buttons, active states, badges */
+  --color-primary-content: #101014;
+  --color-secondary: #26262b;  /* hover/selected row background */
+  --color-secondary-content: #f2f2f3;
+  --color-accent: #4fd1c5;
+  --color-accent-content: #101014;
+  --color-neutral: #242428;    /* sidebar row "bubble" background */
+  --color-neutral-content: #f2f2f3;
+  --color-info: #a78bfa;       /* explicitly set so form controls (checkboxes etc.) never
+                                   fall back to the browser's default blue */
+  --color-info-content: #1a1030;
+  --color-success: #4ade80;    /* online dot */
+  --color-success-content: #052e13;
+  --color-error: #f87171;      /* offline dot, destructive actions */
+  --color-error-content: #2a0a0a;
+  --radius-selector: 1rem;
+  --radius-field: 0.75rem;
+  --radius-box: 1rem;
+}

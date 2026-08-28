@@ -43,6 +43,7 @@ public class UsersController(ChatDbContext db, CryptoHelper crypto) : Controller
             .Select(m => new
             {
                 PartnerId = m.SenderId == userId ? m.ReceiverId : m.SenderId,
+                m.SenderId,
                 m.Text,
                 m.AttachmentFileName,
                 m.SentAt,
@@ -72,7 +73,8 @@ public class UsersController(ChatDbContext db, CryptoHelper crypto) : Controller
                 return new ConversationSummary(
                     new UserDto(user.Id, user.Name, user.Email, user.Avatar, user.Gender, user.IsOnline),
                     preview,
-                    m.SentAt
+                    m.SentAt,
+                    m.SenderId == userId
                 );
             })
             .OrderByDescending(s => s.LastMessageAt)

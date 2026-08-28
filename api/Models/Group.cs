@@ -6,6 +6,8 @@ public class Group
 
     public string Name { get; set; } = string.Empty;
 
+    public string? Avatar { get; set; }
+
     public int CreatedById { get; set; }
 
     public User? CreatedBy { get; set; }

@@ -44,7 +44,7 @@ public class GroupsController(ChatDbContext db, CryptoHelper crypto, IHubContext
         var recentMessages = await db.GroupMessages
             .Where(m => groupIds.Contains(m.GroupId))
             .OrderByDescending(m => m.SentAt)
-            .Select(m => new { m.GroupId, m.Text, m.AttachmentFileName, m.SentAt })
+            .Select(m => new { m.GroupId, m.SenderId, m.Text, m.AttachmentFileName, m.SentAt })
             .ToListAsync();
 
         var latestPerGroup = recentMessages
@@ -62,7 +62,11 @@ public class GroupsController(ChatDbContext db, CryptoHelper crypto, IHubContext
                         ? last.Text
                         : last.AttachmentFileName is not null ? $"\U0001F4CE {last.AttachmentFileName}" : string.Empty;
 
-                return new GroupSummary(g.Id, g.Name, preview, last?.SentAt, memberCounts.GetValueOrDefault(g.Id));
+                return new GroupSummary(
+                    g.Id, g.Name, g.Avatar, preview, last?.SentAt,
+                    last is not null && last.SenderId == callerId,
+                    memberCounts.GetValueOrDefault(g.Id)
+                );
             })
             .OrderByDescending(s => s.LastMessageAt ?? DateTime.MinValue)
             .ToList();
@@ -327,6 +331,29 @@ public class GroupsController(ChatDbContext db, CryptoHelper crypto, IHubContext
         return Ok(await BuildGroupDto(groupId));
     }
 
+    [HttpPut("{groupId:int}/avatar")]
+    public async Task<ActionResult<GroupDto>> UpdateGroupAvatar(int groupId, UpdateGroupAvatarRequest request)
+    {
+        var callerMembership = await FindMembership(groupId, CallerId);
+        if (callerMembership is null) return NotFound();
+        if (!callerMembership.IsAdmin)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Only group admins can change the group photo." });
+        }
+
+        var group = await db.Groups.FirstAsync(g => g.Id == groupId);
+        group.Avatar = request.Avatar.Trim();
+        await db.SaveChangesAsync();
+
+        var memberIds = await db.GroupMembers.Where(m => m.GroupId == groupId).Select(m => m.UserId).ToListAsync();
+        foreach (var memberId in memberIds)
+        {
+            await hub.Clients.Group(ChatHub.UserGroup(memberId)).SendAsync("GroupAvatarChanged", groupId, group.Avatar);
+        }
+
+        return Ok(await BuildGroupDto(groupId));
+    }
+
     [HttpDelete("{groupId:int}")]
     public async Task<ActionResult> DeleteGroup(int groupId)
     {
@@ -362,6 +389,6 @@ public class GroupsController(ChatDbContext db, CryptoHelper crypto, IHubContext
                 (gm, u) => new GroupMemberDto(u.Id, u.Name, u.Avatar, u.IsOnline, gm.IsAdmin, gm.JoinedAt))
             .ToListAsync();
 
-        return new GroupDto(group.Id, group.Name, group.CreatedById, group.CreatedAt, members);
+        return new GroupDto(group.Id, group.Name, group.Avatar, group.CreatedById, group.CreatedAt, members);
     }
 }
