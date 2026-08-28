@@ -5,6 +5,7 @@ import { ForgotPassword } from '../features/forgot-password/forgot-password';
 import { ChangePassword } from '../features/change-password/change-password';
 import { ResetPassword } from '../features/reset-password/reset-password';
 import { Chat } from '../features/chat/chat';
+import { authGuard } from '../core/guards/auth-guard';
 
 export const routes: Routes = [
     { path: '', redirectTo: 'login', pathMatch: 'full' },
@@ -13,5 +14,5 @@ export const routes: Routes = [
     { path: 'forgot-password', component: ForgotPassword },
     { path: 'change-password', component: ChangePassword },
     { path: 'reset-password', component: ResetPassword },
-    { path: 'chat', component: Chat },
+    { path: 'chat', component: Chat, canActivate: [authGuard] },
 ];
